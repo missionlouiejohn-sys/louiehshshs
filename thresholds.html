@@ -112,21 +112,7 @@
 <!-- MAIN CONTENT -->
 <main class="max-w-5xl mx-auto px-6 py-10 space-y-8 animate-fade-in">
 
-  <!-- Firebase data structure info -->
-  <div class="bg-carbon-800/60 border border-carbon-700 rounded-2xl p-5">
-    <p class="text-xs font-mono text-gray-500 uppercase tracking-widest mb-3">Firebase Path Structure</p>
-    <pre class="text-xs font-mono text-cyan-400/80 leading-relaxed bg-carbon-900 rounded-xl p-4 overflow-x-auto">
-Thresholds/
-  ├── temperature/
-  │     ├── min          → number   (°C)
-  │     └── max          → number   (°C)
-  ├── humidity/
-  │     ├── min          → number   (%)
-  │     └── max          → number   (%)
-  ├── cooldownMin        → number   (minutes between alerts)
-  └── alertEmail         → string   (recipient address)</pre>
-    <p class="text-xs text-gray-600 font-mono mt-3">The ESP32 reads this path every 30 s and compares against live DHT11 data. Breaches trigger SMTP email after the cooldown period.</p>
-  </div>
+
 
   <!-- FORM CARD -->
   <div class="bg-carbon-800 border border-carbon-700 rounded-2xl overflow-hidden">
