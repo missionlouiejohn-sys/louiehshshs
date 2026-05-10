@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threshold Settings · ESP32 Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          mono: ['Space Mono', 'monospace'],
+          display: ['Syne', 'sans-serif'],
+        },
+        colors: {
+          carbon: {
+            950: '#0a0c0f',
+            900: '#0f1117',
+            800: '#161b24',
+            700: '#1e2535',
+            600: '#252f42',
+          },
+          cyan:  { neon: '#00f5d4' },
+          amber: { glow: '#ffb703' },
+          red:   { hot:  '#ff4d6d' },
+        },
+        boxShadow: {
+          'neon-cyan':  '0 0 18px rgba(0,245,212,0.35)',
+          'neon-amber': '0 0 18px rgba(255,183,3,0.35)',
+          'neon-red':   '0 0 18px rgba(255,77,109,0.35)',
+        },
+        animation: {
+          'pulse-slow': 'pulse 3s cubic-bezier(0.4,0,0.6,1) infinite',
+          'fade-in': 'fadeIn 0.4s ease forwards',
+          'slide-in': 'slideIn 0.3s ease forwards',
+        },
+        keyframes: {
+          fadeIn:  { from: { opacity: 0, transform: 'translateY(8px)'  }, to: { opacity: 1, transform: 'translateY(0)' } },
+          slideIn: { from: { opacity: 0, transform: 'translateY(-10px)'}, to: { opacity: 1, transform: 'translateY(0)' } },
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body { background-color: #0a0c0f; }
+  .grid-bg {
+    background-image: linear-gradient(rgba(0,245,212,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0,245,212,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  /* Custom range slider */
+  input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #252f42; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #00f5d4; cursor: pointer; box-shadow: 0 0 8px rgba(0,245,212,0.6); }
+  input[type="range"].amber-thumb::-webkit-slider-thumb { background: #ffb703; box-shadow: 0 0 8px rgba(255,183,3,0.6); }
+
+  /* Input field focus glow */
+  .input-field {
+    @apply w-full bg-carbon-700 border border-carbon-600 text-white text-sm font-mono rounded-xl px-4 py-3 transition-all;
+    outline: none;
+  }
+  .input-field:focus { border-color: #00f5d4; box-shadow: 0 0 0 3px rgba(0,245,212,0.1); }
+  .input-field.amber:focus { border-color: #ffb703; box-shadow: 0 0 0 3px rgba(255,183,3,0.1); }
+  .input-field.error { border-color: #ff4d6d !important; box-shadow: 0 0 0 3px rgba(255,77,109,0.1); }
+
+  /* Toast */
+  #toast { transition: all 0.3s ease; }
+  .input-field {
+  background-color: #1a1f2b;
+}
+</style>
+</head>
+<body class="grid-bg min-h-screen font-display text-gray-100">
+
+<!-- HEADER -->
+<header class="border-b border-carbon-700 bg-carbon-900/80 backdrop-blur sticky top-0 z-50">
+  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-4">
+      <!-- Back button -->
+      <a href="index.html"
+        class="flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-carbon-700 border border-carbon-600 text-gray-400 rounded-lg hover:border-cyan-500/50 hover:text-cyan-400 transition-all">
+        ← Dashboard
+      </a>
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+          <span class="text-base">⚙️</span>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white">Threshold Settings</h1>
+          <p class="text-xs text-gray-500 font-mono">Firebase · /Thresholds · SMTP Alerts</p>
+        </div>
+      </div>
+    </div>
+    <!-- Firebase status -->
+    <div id="fbStatus" class="flex items-center gap-2 text-xs font-mono text-gray-400 bg-carbon-800 border border-carbon-700 px-3 py-1.5 rounded-full">
+      <span class="w-2 h-2 rounded-full bg-gray-600 animate-pulse-slow" id="fbDot"></span>
+      <span id="fbText">Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<!-- TOAST NOTIFICATION -->
+<div id="toast" class="fixed top-6 right-6 z-[100] hidden">
+  <div id="toastInner" class="flex items-center gap-3 px-5 py-3 rounded-xl border text-sm font-mono shadow-xl animate-slide-in">
+    <span id="toastIcon">✓</span>
+    <span id="toastMsg">Saved!</span>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<main class="max-w-5xl mx-auto px-6 py-10 space-y-8 animate-fade-in">
+
+  <!-- Firebase data structure info -->
+  <div class="bg-carbon-800/60 border border-carbon-700 rounded-2xl p-5">
+    <p class="text-xs font-mono text-gray-500 uppercase tracking-widest mb-3">Firebase Path Structure</p>
+    <pre class="text-xs font-mono text-cyan-400/80 leading-relaxed bg-carbon-900 rounded-xl p-4 overflow-x-auto">
+Thresholds/
+  ├── temperature/
+  │     ├── min          → number   (°C)
+  │     └── max          → number   (°C)
+  ├── humidity/
+  │     ├── min          → number   (%)
+  │     └── max          → number   (%)
+  ├── cooldownMin        → number   (minutes between alerts)
+  └── alertEmail         → string   (recipient address)</pre>
+    <p class="text-xs text-gray-600 font-mono mt-3">The ESP32 reads this path every 30 s and compares against live DHT11 data. Breaches trigger SMTP email after the cooldown period.</p>
+  </div>
+
+  <!-- FORM CARD -->
+  <div class="bg-carbon-800 border border-carbon-700 rounded-2xl overflow-hidden">
+
+    <!-- Card header -->
+    <div class="px-6 py-5 border-b border-carbon-700 flex items-center justify-between">
+      <div>
+        <h2 class="font-bold text-white">Alert Thresholds</h2>
+        <p class="text-xs text-gray-500 font-mono mt-0.5">Changes sync to Firebase instantly on save</p>
+      </div>
+      <button id="loadBtn"
+        class="px-4 py-2 text-xs font-semibold bg-carbon-700 border border-carbon-600 text-gray-400 rounded-lg hover:border-cyan-500/50 hover:text-cyan-400 transition-all">
+        ↺ Reload from Firebase
+      </button>
+    </div>
+
+    <div class="p-6 space-y-8">
+
+      <!-- ── TEMPERATURE ─────────────────────── -->
+      <section>
+        <div class="flex items-center gap-3 mb-5">
+          <span class="text-xl">🌡️</span>
+          <h3 class="font-semibold text-amber-400 tracking-wide">Temperature</h3>
+          <span class="text-xs font-mono text-gray-600 ml-auto">Range in °C</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <!-- Min Temp -->
+          <div class="space-y-2">
+            <label class="flex items-center justify-between">
+              <span class="text-xs font-mono text-gray-500 uppercase tracking-widest">Min Temperature</span>
+              <span id="tempMinVal" class="text-xs font-bold font-mono text-amber-400">—</span>
+            </label>
+            <input type="number" id="tempMin" class="input-field amber" placeholder="e.g. 20" step="0.1" />
+            <input type="range"  id="tempMinSlider" class="w-full amber-thumb" min="-20" max="60" step="0.5" value="20" />
+            <p id="tempMinErr" class="text-xs text-red-400 font-mono hidden"></p>
+          </div>
+          <!-- Max Temp -->
+          <div class="space-y-2">
+            <label class="flex items-center justify-between">
+              <span class="text-xs font-mono text-gray-500 uppercase tracking-widest">Max Temperature</span>
+              <span id="tempMaxVal" class="text-xs font-bold font-mono text-amber-400">—</span>
+            </label>
+            <input type="number" id="tempMax" class="input-field amber" placeholder="e.g. 35" step="0.1" />
+            <input type="range"  id="tempMaxSlider" class="w-full amber-thumb" min="-20" max="60" step="0.5" value="35" />
+            <p id="tempMaxErr" class="text-xs text-red-400 font-mono hidden"></p>
+          </div>
+        </div>
+        <!-- Visual range bar -->
+        <div class="mt-4 h-1.5 rounded-full bg-carbon-700 relative overflow-hidden">
+          <div id="tempRangeBar" class="absolute h-full bg-amber-500/50 rounded-full transition-all duration-300"></div>
+        </div>
+        <div class="flex justify-between text-xs font-mono text-gray-700 mt-1">
+          <span>-20°C</span><span>60°C</span>
+        </div>
+      </section>
+
+      <div class="border-t border-carbon-700"></div>
+
+      <!-- ── HUMIDITY ─────────────────────────── -->
+      <section>
+        <div class="flex items-center gap-3 mb-5">
+          <span class="text-xl">💧</span>
+          <h3 class="font-semibold text-cyan-400 tracking-wide">Humidity</h3>
+          <span class="text-xs font-mono text-gray-600 ml-auto">Range in %</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <!-- Min Humidity -->
+          <div class="space-y-2">
+            <label class="flex items-center justify-between">
+              <span class="text-xs font-mono text-gray-500 uppercase tracking-widest">Min Humidity</span>
+              <span id="humMinVal" class="text-xs font-bold font-mono text-cyan-400">—</span>
+            </label>
+            <input type="number" id="humMin" class="input-field" placeholder="e.g. 30" step="1" />
+            <input type="range"  id="humMinSlider" class="w-full" min="0" max="100" step="1" value="30" />
+            <p id="humMinErr" class="text-xs text-red-400 font-mono hidden"></p>
+          </div>
+          <!-- Max Humidity -->
+          <div class="space-y-2">
+            <label class="flex items-center justify-between">
+              <span class="text-xs font-mono text-gray-500 uppercase tracking-widest">Max Humidity</span>
+              <span id="humMaxVal" class="text-xs font-bold font-mono text-cyan-400">—</span>
+            </label>
+            <input type="number" id="humMax" class="input-field" placeholder="e.g. 80" step="1" />
+            <input type="range"  id="humMaxSlider" class="w-full" min="0" max="100" step="1" value="80" />
+            <p id="humMaxErr" class="text-xs text-red-400 font-mono hidden"></p>
+          </div>
+        </div>
+        <!-- Visual range bar -->
+        <div class="mt-4 h-1.5 rounded-full bg-carbon-700 relative overflow-hidden">
+          <div id="humRangeBar" class="absolute h-full bg-cyan-500/50 rounded-full transition-all duration-300"></div>
+        </div>
+        <div class="flex justify-between text-xs font-mono text-gray-700 mt-1">
+          <span>0%</span><span>100%</span>
+        </div>
+      </section>
+
+      <div class="border-t border-carbon-700"></div>
+
+      <!-- ── ALERT SETTINGS ──────────────────── -->
+      <section>
+        <div class="flex items-center gap-3 mb-5">
+          <span class="text-xl">📧</span>
+          <h3 class="font-semibold text-purple-400 tracking-wide">Alert Settings</h3>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <!-- Cooldown -->
+          <div class="space-y-2">
+            <label class="flex items-center justify-between">
+              <span class="text-xs font-mono text-gray-500 uppercase tracking-widest">Cooldown Period</span>
+              <span id="cooldownVal" class="text-xs font-bold font-mono text-purple-400">—</span>
+            </label>
+            <div class="relative">
+              <input type="number" id="cooldown" class="input-field pr-16" placeholder="10" min="1" step="1" />
+              <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500">minutes</span>
+            </div>
+            <input type="range" id="cooldownSlider" class="w-full" min="1" max="120" step="1" value="10"
+              style="--thumb-color:#a78bfa"
+              onmouseenter="this.style.setProperty('--tw-ring-color','#a78bfa')" />
+            <p class="text-xs text-gray-600 font-mono">Minimum time between email alerts for the same breach.</p>
+            <p id="cooldownErr" class="text-xs text-red-400 font-mono hidden"></p>
+          </div>
+          <!-- Recipient Email -->
+          <div class="space-y-2">
+            <label class="flex items-center justify-between">
+              <span class="text-xs font-mono text-gray-500 uppercase tracking-widest">Recipient Email</span>
+            </label>
+            <input type="email" id="alertEmail" class="input-field" placeholder="you@example.com" />
+            <p class="text-xs text-gray-600 font-mono">The ESP32 reads this address to send SMTP breach alerts.</p>
+            <p id="emailErr" class="text-xs text-red-400 font-mono hidden"></p>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /p-6 -->
+
+    <!-- SAVE FOOTER -->
+    <div class="px-6 py-5 border-t border-carbon-700 bg-carbon-900/40 flex flex-wrap items-center justify-between gap-4">
+      <div class="text-xs font-mono text-gray-600 space-y-0.5">
+        <p>Saved values are immediately available to the ESP32.</p>
+        <p>The device re-fetches thresholds every <span class="text-cyan-400">30 seconds</span>.</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="resetBtn"
+          class="px-5 py-2.5 text-sm font-semibold bg-carbon-700 border border-carbon-600 text-gray-400 rounded-xl hover:border-red-500/50 hover:text-red-400 transition-all">
+          Reset
+        </button>
+        <button id="saveBtn"
+          class="px-6 py-2.5 text-sm font-semibold bg-cyan-500/10 border border-cyan-500/40 text-cyan-400 rounded-xl hover:bg-cyan-500/20 hover:border-cyan-500 transition-all flex items-center gap-2">
+          <span id="saveBtnIcon">💾</span>
+          <span id="saveBtnText">Save to Firebase</span>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /card -->
+
+  <!-- CURRENT VALUES PANEL (read from Firebase live) -->
+  <div class="bg-carbon-800 border border-carbon-700 rounded-2xl p-6">
+    <p class="text-xs font-mono text-gray-500 uppercase tracking-widest mb-4">Current Firebase Values</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="bg-carbon-900 rounded-xl p-4 border border-carbon-700">
+        <p class="text-xs font-mono text-gray-600 mb-1">Temp Min</p>
+        <p class="text-xl font-bold font-mono text-amber-400"><span id="fbTempMin">--</span>°C</p>
+      </div>
+      <div class="bg-carbon-900 rounded-xl p-4 border border-carbon-700">
+        <p class="text-xs font-mono text-gray-600 mb-1">Temp Max</p>
+        <p class="text-xl font-bold font-mono text-amber-400"><span id="fbTempMax">--</span>°C</p>
+      </div>
+      <div class="bg-carbon-900 rounded-xl p-4 border border-carbon-700">
+        <p class="text-xs font-mono text-gray-600 mb-1">Hum Min</p>
+        <p class="text-xl font-bold font-mono text-cyan-400"><span id="fbHumMin">--</span>%</p>
+      </div>
+      <div class="bg-carbon-900 rounded-xl p-4 border border-carbon-700">
+        <p class="text-xs font-mono text-gray-600 mb-1">Hum Max</p>
+        <p class="text-xl font-bold font-mono text-cyan-400"><span id="fbHumMax">--</span>%</p>
+      </div>
+      <div class="bg-carbon-900 rounded-xl p-4 border border-carbon-700 sm:col-span-2">
+        <p class="text-xs font-mono text-gray-600 mb-1">Cooldown</p>
+        <p class="text-xl font-bold font-mono text-purple-400"><span id="fbCooldown">--</span> min</p>
+      </div>
+      <div class="bg-carbon-900 rounded-xl p-4 border border-carbon-700 sm:col-span-2">
+        <p class="text-xs font-mono text-gray-600 mb-1">Alert Email</p>
+        <p class="text-sm font-bold font-mono text-gray-300 truncate"><span id="fbEmail">--</span></p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ─────────────────────── FIREBASE + LOGIC ─────────────────────── -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, get }
+  from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+// ── Firebase config (same project as index.html) ──────────────────
+const firebaseConfig = {
+  apiKey:      "AIzaSyBPJbC3ffAMpa9FbkwigUwOyGKy7Pwkra4",
+  databaseURL: "https://fynistchina-default-rtdb.asia-southeast1.firebasedatabase.app/"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// ── Element refs ───────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+const fields = {
+  tempMin:  $("tempMin"),  tempMinSlider: $("tempMinSlider"),
+  tempMax:  $("tempMax"),  tempMaxSlider: $("tempMaxSlider"),
+  humMin:   $("humMin"),   humMinSlider:  $("humMinSlider"),
+  humMax:   $("humMax"),   humMaxSlider:  $("humMaxSlider"),
+  cooldown: $("cooldown"), cooldownSlider: $("cooldownSlider"),
+  alertEmail: $("alertEmail"),
+};
+
+// ── Range-bar updater ──────────────────────────────────────────────
+function updateTempBar() {
+  const min = parseFloat(fields.tempMin.value)  || 20;
+  const max = parseFloat(fields.tempMax.value)  || 35;
+  const total = 80; // -20 to 60
+  const left  = ((min + 20) / total) * 100;
+  const width = ((max - min)   / total) * 100;
+  $("tempRangeBar").style.left  = Math.max(0, left) + "%";
+  $("tempRangeBar").style.width = Math.max(0, width) + "%";
+}
+function updateHumBar() {
+  const min = parseFloat(fields.humMin.value) || 30;
+  const max = parseFloat(fields.humMax.value) || 80;
+  $("humRangeBar").style.left  = min + "%";
+  $("humRangeBar").style.width = (max - min) + "%";
+}
+
+// ── Sync number input ↔ slider ──────────────────────────────────────
+function syncPair(inputEl, sliderEl, valEl, suffix, barFn) {
+  inputEl.addEventListener("input", () => {
+    sliderEl.value = inputEl.value;
+    valEl.textContent = inputEl.value ? inputEl.value + suffix : "—";
+    barFn();
+    clearErr(inputEl.id.replace("tempMin","tempMin").replace("tempMax","tempMax"));
+  });
+  sliderEl.addEventListener("input", () => {
+    inputEl.value = sliderEl.value;
+    valEl.textContent = sliderEl.value + suffix;
+    barFn();
+  });
+}
+
+syncPair(fields.tempMin,  fields.tempMinSlider, $("tempMinVal"), "°C", updateTempBar);
+syncPair(fields.tempMax,  fields.tempMaxSlider, $("tempMaxVal"), "°C", updateTempBar);
+syncPair(fields.humMin,   fields.humMinSlider,  $("humMinVal"),  "%",  updateHumBar);
+syncPair(fields.humMax,   fields.humMaxSlider,  $("humMaxVal"),  "%",  updateHumBar);
+
+fields.cooldown.addEventListener("input", () => {
+  fields.cooldownSlider.value = fields.cooldown.value;
+  $("cooldownVal").textContent = fields.cooldown.value ? fields.cooldown.value + " min" : "—";
+});
+fields.cooldownSlider.addEventListener("input", () => {
+  fields.cooldown.value = fields.cooldownSlider.value;
+  $("cooldownVal").textContent = fields.cooldownSlider.value + " min";
+});
+
+// ── Validation ─────────────────────────────────────────────────────
+function showErr(id, msg) {
+  const el = $(id + "Err");
+  if (el) { el.textContent = msg; el.classList.remove("hidden"); }
+  const input = $(id);
+  if (input) input.classList.add("error");
+  return false;
+}
+function clearErr(id) {
+  const el = $(id + "Err");
+  if (el) el.classList.add("hidden");
+  const input = $(id);
+  if (input) input.classList.remove("error");
+}
+function clearAll() {
+  ["tempMin","tempMax","humMin","humMax","cooldown","alertEmail"].forEach(clearErr);
+}
+
+function validate() {
+  clearAll();
+  let ok = true;
+  const tMin = parseFloat(fields.tempMin.value);
+  const tMax = parseFloat(fields.tempMax.value);
+  const hMin = parseFloat(fields.humMin.value);
+  const hMax = parseFloat(fields.humMax.value);
+  const cool = parseFloat(fields.cooldown.value);
+  const email = fields.alertEmail.value.trim();
+
+  if (isNaN(tMin)) { showErr("tempMin", "Required"); ok = false; }
+  if (isNaN(tMax)) { showErr("tempMax", "Required"); ok = false; }
+  if (!isNaN(tMin) && !isNaN(tMax) && tMin >= tMax)
+    { showErr("tempMin", "Min must be less than Max"); ok = false; }
+
+  if (isNaN(hMin) || hMin < 0 || hMin > 100) { showErr("humMin", "Must be 0–100"); ok = false; }
+  if (isNaN(hMax) || hMax < 0 || hMax > 100) { showErr("humMax", "Must be 0–100"); ok = false; }
+  if (!isNaN(hMin) && !isNaN(hMax) && hMin >= hMax)
+    { showErr("humMin", "Min must be less than Max"); ok = false; }
+
+  if (isNaN(cool) || cool <= 0) { showErr("cooldown", "Must be a positive number"); ok = false; }
+
+  const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email)              { showErr("alertEmail", "Required"); ok = false; }
+  else if (!emailRx.test(email)) { showErr("alertEmail", "Invalid email address"); ok = false; }
+
+  return ok;
+}
+
+// ── Toast ───────────────────────────────────────────────────────────
+function showToast(msg, type = "success") {
+  const toast = $("toast");
+  const inner = $("toastInner");
+  const icon  = $("toastIcon");
+  const msgEl = $("toastMsg");
+
+  msgEl.textContent = msg;
+  if (type === "success") {
+    inner.className = "flex items-center gap-3 px-5 py-3 rounded-xl border text-sm font-mono shadow-xl animate-slide-in bg-green-500/10 border-green-500/40 text-green-400";
+    icon.textContent = "✓";
+  } else {
+    inner.className = "flex items-center gap-3 px-5 py-3 rounded-xl border text-sm font-mono shadow-xl animate-slide-in bg-red-500/10 border-red-500/40 text-red-400";
+    icon.textContent = "✕";
+  }
+  toast.classList.remove("hidden");
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.add("hidden"), 3500);
+}
+
+// ── Populate form from Firebase data ───────────────────────────────
+function populateForm(t) {
+  if (!t) return;
+  const set = (el, slider, val, valEl, suffix) => {
+    el.value     = val ?? "";
+    slider.value = val ?? slider.min;
+    valEl.textContent = val !== undefined ? val + suffix : "—";
+  };
+  set(fields.tempMin,  fields.tempMinSlider,  t.temperature?.min, $("tempMinVal"), "°C");
+  set(fields.tempMax,  fields.tempMaxSlider,  t.temperature?.max, $("tempMaxVal"), "°C");
+  set(fields.humMin,   fields.humMinSlider,   t.humidity?.min,    $("humMinVal"),  "%");
+  set(fields.humMax,   fields.humMaxSlider,   t.humidity?.max,    $("humMaxVal"),  "%");
+  set(fields.cooldown, fields.cooldownSlider, t.cooldownMin,      $("cooldownVal"), " min");
+  fields.alertEmail.value = t.alertEmail || "";
+  updateTempBar(); updateHumBar();
+}
+
+// ── Firebase live listener (current values panel) ──────────────────
+onValue(ref(db, "Thresholds"), snap => {
+  const t = snap.val();
+
+  // Update status badge
+  $("fbDot").className  = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse-slow";
+  $("fbText").textContent = t ? "Connected" : "No data yet";
+
+  if (!t) return;
+
+  // Populate current values panel
+  $("fbTempMin").textContent = t.temperature?.min  ?? "--";
+  $("fbTempMax").textContent = t.temperature?.max  ?? "--";
+  $("fbHumMin").textContent  = t.humidity?.min     ?? "--";
+  $("fbHumMax").textContent  = t.humidity?.max     ?? "--";
+  $("fbCooldown").textContent = t.cooldownMin      ?? "--";
+  $("fbEmail").textContent   = t.alertEmail        || "--";
+});
+
+// ── Load button — fetch and fill form ──────────────────────────────
+$("loadBtn").onclick = async () => {
+  $("loadBtn").textContent = "Loading…";
+  try {
+    const snap = await get(ref(db, "Thresholds"));
+    populateForm(snap.val());
+    showToast("Loaded from Firebase");
+  } catch (e) {
+    showToast("Load failed: " + e.message, "error");
+  } finally {
+    $("loadBtn").textContent = "↺ Reload from Firebase";
+  }
+};
+
+// ── Save button ────────────────────────────────────────────────────
+$("saveBtn").onclick = async () => {
+  if (!validate()) {
+    showToast("Please fix the errors above", "error");
+    return;
+  }
+
+  const payload = {
+    temperature: {
+      min: parseFloat(fields.tempMin.value),
+      max: parseFloat(fields.tempMax.value),
+    },
+    humidity: {
+      min: parseFloat(fields.humMin.value),
+      max: parseFloat(fields.humMax.value),
+    },
+    cooldownMin: parseInt(fields.cooldown.value, 10),
+    alertEmail:  fields.alertEmail.value.trim(),
+  };
+
+  $("saveBtnText").textContent = "Saving…";
+  $("saveBtnIcon").textContent = "⏳";
+
+  try {
+    await set(ref(db, "Thresholds"), payload);
+    showToast("✓ Thresholds saved to Firebase!");
+    $("saveBtnIcon").textContent = "✓";
+    $("saveBtnText").textContent = "Saved!";
+    setTimeout(() => {
+      $("saveBtnIcon").textContent = "💾";
+      $("saveBtnText").textContent = "Save to Firebase";
+    }, 2500);
+  } catch (err) {
+    showToast("Save failed: " + err.message, "error");
+    $("saveBtnIcon").textContent = "💾";
+    $("saveBtnText").textContent = "Save to Firebase";
+  }
+};
+
+// ── Reset button ───────────────────────────────────────────────────
+$("resetBtn").onclick = () => {
+  ["tempMin","tempMax","humMin","humMax","cooldown"].forEach(id => {
+    $(id).value = "";
+  });
+  fields.alertEmail.value = "";
+  fields.tempMinSlider.value = 20;
+  fields.tempMaxSlider.value = 35;
+  fields.humMinSlider.value  = 30;
+  fields.humMaxSlider.value  = 80;
+  fields.cooldownSlider.value = 10;
+  ["tempMinVal","tempMaxVal","humMinVal","humMaxVal","cooldownVal"]
+    .forEach(id => $(id).textContent = "—");
+  clearAll();
+  updateTempBar(); updateHumBar();
+};
+
+// ── Auto-load on page open ─────────────────────────────────────────
+(async () => {
+  try {
+    const snap = await get(ref(db, "Thresholds"));
+    if (snap.exists()) populateForm(snap.val());
+  } catch (_) { /* silent — live listener will retry */ }
+})();
+
+</script>
+</body>
+</html>
